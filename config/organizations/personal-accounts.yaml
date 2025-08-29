@@ -1,0 +1,224 @@
+---
+# Personal Accounts AWS Organization Configuration
+# Based on the existing aws-iac-organizations-personal project
+
+metadata:
+  name: "personal-accounts"
+  description: "Personal AWS Organization for individual companies and projects"
+  version: "1.0.0"
+
+environments:
+  dev:
+    target: localstack
+    endpoint: http://localhost:4566
+    region: us-east-1
+    profile: null
+    
+  qa:
+    target: aws
+    profile: personal-qa-admin
+    region: us-west-2
+    
+  prod:
+    target: aws
+    profile: timnichols-sandbox-mgmt-admin
+    region: us-west-2
+
+organization:
+  feature_set: ALL
+  default_region: us-west-2
+  allowed_regions: [us-west-2, us-east-1]
+  service_access_principals:
+    - sso.amazonaws.com
+    - cloudtrail.amazonaws.com
+    - guardduty.amazonaws.com
+    - securityhub.amazonaws.com
+    - config.amazonaws.com
+
+organizational_units:
+  - name: Security
+    description: Security and compliance accounts
+    
+  - name: SharedServices
+    description: Shared infrastructure and services
+    
+  - name: Businesses
+    description: Individual business accounts
+    
+  - name: Sandbox
+    description: Development and testing accounts
+
+accounts:
+  # Security Accounts
+  - name: log-archive
+    email: aws-root+log-archive@is-design.com
+    ou: Security
+    description: Centralized log archive for CloudTrail and security logs
+    
+  - name: security-tooling
+    email: aws-root+security-tooling@is-design.com
+    ou: Security
+    description: Security tooling, GuardDuty, Security Hub
+    
+  # Shared Services Account
+  - name: shared-services
+    email: aws-root+shared-services@is-design.com
+    ou: SharedServices
+    description: Shared DNS, networking, CI/CD infrastructure
+    
+  # Individual Business Accounts
+  - name: interactive-software-design-llc
+    email: aws-root@is-design.com
+    ou: Businesses
+    description: Interactive Software Design LLC - software development services
+    
+  - name: still-me-studio-llc
+    email: aws-root@stillmestudio.com
+    ou: Businesses
+    description: Still Me Studio LLC - creative studio and digital content
+    
+  - name: intelligent-systems-design-inc
+    email: aws-root@is-design.biz
+    ou: Businesses
+    description: Intelligent Systems Design Inc - enterprise software solutions
+    
+  - name: throwdownpress
+    email: aws-root@throwdownpress.com
+    ou: Businesses
+    description: ThrowdownPress - publishing and content platform
+    
+  # Sandbox Account
+  - name: sandboxes
+    email: aws-root+sandboxes@is-design.com
+    ou: Sandbox
+    description: Development and experimental workloads
+
+policies:
+  tag_policies:
+    - name: PersonalAccountsStandardTags
+      description: Standard tagging policy for personal organization
+      required_tags:
+        - entity
+        - env
+        - owner
+      tag_values:
+        entity: [isd, throwdownpress, stillmestudio, intelligentsystems]
+        env: [dev, prod, sbx]
+        
+  service_control_policies:
+    - name: baseline_security
+      description: Baseline security restrictions
+      policies:
+        - prevent_org_changes
+        - region_restrictions
+        - prevent_security_service_disabling
+
+sso:
+  enabled: true
+  
+  permission_sets:
+    - name: PowerUser
+      description: Power user access for development and operations
+      managed_policies:
+        - arn:aws:iam::aws:policy/PowerUserAccess
+      session_duration: PT12H
+      
+    - name: ReadOnly
+      description: Read-only access for monitoring and auditing
+      managed_policies:
+        - arn:aws:iam::aws:policy/ReadOnlyAccess
+      session_duration: PT8H
+      
+    - name: SecurityAuditor
+      description: Security auditing access
+      managed_policies:
+        - arn:aws:iam::aws:policy/SecurityAudit
+        - arn:aws:iam::aws:policy/ReadOnlyAccess
+      session_duration: PT8H
+      
+    - name: Billing
+      description: Billing and cost management access
+      managed_policies:
+        - arn:aws:iam::aws:policy/job-function/Billing
+      session_duration: PT4H
+
+  group_assignments:
+    # Developers get PowerUser access to all business accounts
+    - group_name: Developers
+      permission_set: PowerUser
+      accounts: [interactive-software-design-llc, still-me-studio-llc, intelligent-systems-design-inc, throwdownpress]
+      
+    # Administrators get PowerUser access to all accounts
+    - group_name: Administrators
+      permission_set: PowerUser
+      accounts: [log-archive, security-tooling, shared-services, interactive-software-design-llc, still-me-studio-llc, intelligent-systems-design-inc, throwdownpress, sandboxes]
+      
+    # Security team gets auditor access to all accounts
+    - group_name: Security
+      permission_set: SecurityAuditor
+      accounts: [log-archive, security-tooling, shared-services, interactive-software-design-llc, still-me-studio-llc, intelligent-systems-design-inc, throwdownpress]
+
+github_actions:
+  enabled: true
+  
+  repositories:
+    - repo: timnichols/infrastructure
+      environments: [dev, qa, prod]
+      
+    - repo: stillmestudio/website
+      environments: [dev, qa, prod]
+      
+    - repo: throwdownpress/platform
+      environments: [dev, qa, prod]
+      
+    - repo: intelligent-systems/enterprise-platform
+      environments: [dev, qa, prod]
+      
+  permissions:
+    dev:
+      accounts: [sandboxes, shared-services]
+      policies: [arn:aws:iam::aws:policy/PowerUserAccess]
+      
+    qa:
+      accounts: [interactive-software-design-llc, shared-services]
+      policies: [arn:aws:iam::aws:policy/PowerUserAccess]
+      
+    prod:
+      accounts: [interactive-software-design-llc, still-me-studio-llc, intelligent-systems-design-inc, throwdownpress]
+      policies: [arn:aws:iam::aws:policy/ReadOnlyAccess]
+
+security:
+  cloudtrail:
+    enabled: true
+    multi_region: true
+    include_global_service_events: true
+    enable_log_file_validation: true
+    log_retention_days: 90
+    
+  guardduty:
+    enabled: true
+    auto_enable_organization_members: true
+    
+  security_hub:
+    enabled: true
+    auto_enable_organization_members: true
+    standards:
+      - aws-foundational-security-best-practices
+      - cis-aws-foundations-benchmark
+      
+  config:
+    enabled: true
+    all_regions: true
+    include_global_resource_types: true
+
+cost_management:
+  budgets:
+    - name: personal-monthly-budget
+      limit: 500
+      unit: USD
+      time_period: MONTHLY
+      alerts:
+        - threshold: 80
+          notification_emails: [admin@is-design.com]
+        - threshold: 100
+          notification_emails: [admin@is-design.com]

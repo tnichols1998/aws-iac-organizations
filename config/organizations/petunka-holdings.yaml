@@ -1,0 +1,227 @@
+---
+# Petunka Holdings AWS Organization Configuration
+# Based on the existing aws-iac-organizations-petunka project
+
+metadata:
+  name: "petunka-holdings"
+  description: "Petunka Holdings Inc AWS Organization"
+  version: "1.0.0"
+
+environments:
+  dev:
+    target: localstack
+    endpoint: http://localhost:4566
+    region: us-east-1
+    profile: null
+    
+  qa:
+    target: aws
+    profile: petunka-qa-admin
+    region: us-west-2
+    
+  prod:
+    target: aws
+    profile: petunka-sandbox-mgmt-admin
+    region: us-west-2
+
+organization:
+  feature_set: ALL
+  default_region: us-west-2
+  allowed_regions: [us-west-2, us-east-1]
+  service_access_principals:
+    - cloudtrail.amazonaws.com
+    - guardduty.amazonaws.com
+    - securityhub.amazonaws.com
+    - sso.amazonaws.com
+
+organizational_units:
+  - name: Security
+    description: Security and compliance accounts
+    
+  - name: SharedServices
+    description: Shared infrastructure and services
+    
+  - name: Businesses
+    description: Business entity accounts
+    
+  - name: Sandbox
+    description: Development and testing accounts
+
+accounts:
+  # Security Accounts
+  - name: log-archive
+    email: aws-root+log-archive@petunkaholdings.com
+    ou: Security
+    description: Centralized log archive for CloudTrail and security logs
+    
+  - name: security-tooling
+    email: aws-root+security-tooling@petunkaholdings.com
+    ou: Security
+    description: Security tooling, GuardDuty, Security Hub
+    
+  # Shared Services Account
+  - name: shared-services
+    email: aws-root+shared-services@petunkaholdings.com
+    ou: SharedServices
+    description: Shared DNS, networking, CI/CD infrastructure
+    
+  # Petunka Holdings Business Accounts
+  - name: petunka-holdings-inc
+    email: aws-root@petunkaholdings.com
+    ou: Businesses
+    description: Parent holding company - Petunka Holdings Inc
+    
+  - name: petunka-marketing-llc
+    email: aws-root+marketing@petunkaholdings.com
+    ou: Businesses
+    description: Marketing subsidiary - Petunka Marketing LLC
+    
+  - name: internet-marketing-gold
+    email: aws-root+img@petunkaholdings.com
+    ou: Businesses
+    description: Sub-brand under Petunka Marketing LLC - Internet Marketing Gold
+    
+  - name: six-figure-coach-secrets-llc
+    email: aws-root@sixfigurecoachsecrets.com
+    ou: Businesses
+    description: Coaching business subsidiary - Six Figure Coach Secrets LLC
+    
+  # Sandbox Account
+  - name: sandboxes
+    email: aws-root+sandboxes@petunkaholdings.com
+    ou: Sandbox
+    description: Development and experimental workloads
+
+policies:
+  tag_policies:
+    - name: PetunkaHoldingsStandardTags
+      description: Standard tagging policy for Petunka Holdings organization
+      required_tags:
+        - Environment
+        - BusinessUnit
+        - CostCenter
+        - Owner
+      tag_values:
+        Environment: [dev, staging, prod, sandbox]
+        BusinessUnit: [holdings, marketing, coaching, shared-services, security]
+        
+  service_control_policies:
+    - name: baseline_security
+      description: Baseline security restrictions
+      policies:
+        - prevent_org_changes
+        - region_restrictions
+        - prevent_public_s3
+
+sso:
+  enabled: true
+  
+  permission_sets:
+    - name: PowerUser
+      description: Power user access for elevated operations
+      managed_policies:
+        - arn:aws:iam::aws:policy/PowerUserAccess
+      session_duration: PT12H
+      
+    - name: ReadOnly
+      description: Read-only access for auditors and viewers
+      managed_policies:
+        - arn:aws:iam::aws:policy/ReadOnlyAccess
+      session_duration: PT8H
+      
+    - name: SecurityAuditor
+      description: Security auditing and compliance access
+      managed_policies:
+        - arn:aws:iam::aws:policy/SecurityAudit
+        - arn:aws:iam::aws:policy/ReadOnlyAccess
+      session_duration: PT8H
+      
+    - name: Billing
+      description: Billing and cost management access
+      managed_policies:
+        - arn:aws:iam::aws:policy/job-function/Billing
+      session_duration: PT4H
+      
+    - name: OrganizationAdmin
+      description: Organization administration access
+      managed_policies:
+        - arn:aws:iam::aws:policy/service-role/AWSOrganizationsServiceTrustPolicy
+      session_duration: PT4H
+
+  group_assignments:
+    # Engineers get PowerUser access to business accounts
+    - group_name: Engineers
+      permission_set: PowerUser
+      accounts: [petunka-holdings-inc, petunka-marketing-llc, internet-marketing-gold, six-figure-coach-secrets-llc]
+      
+    # Administrators get PowerUser access to all accounts
+    - group_name: Administrators
+      permission_set: PowerUser
+      accounts: [log-archive, security-tooling, shared-services, petunka-holdings-inc, petunka-marketing-llc, internet-marketing-gold, six-figure-coach-secrets-llc, sandboxes]
+      
+    # Finance gets billing access to management account
+    - group_name: Finance
+      permission_set: Billing
+      accounts: [management]
+      
+    # Security gets auditor access to all accounts
+    - group_name: Security
+      permission_set: SecurityAuditor
+      accounts: [log-archive, security-tooling, shared-services, petunka-holdings-inc, petunka-marketing-llc, internet-marketing-gold, six-figure-coach-secrets-llc, sandboxes]
+
+github_actions:
+  enabled: true
+  
+  repositories:
+    - repo: petunka-holdings/infrastructure
+      environments: [dev, qa, prod]
+      
+    - repo: petunka-holdings/marketing-platform
+      environments: [dev, qa, prod]
+      
+    - repo: petunka-holdings/coaching-platform
+      environments: [dev, qa, prod]
+      
+  permissions:
+    dev:
+      accounts: [sandboxes, shared-services]
+      policies: [arn:aws:iam::aws:policy/PowerUserAccess]
+      
+    qa:
+      accounts: [petunka-holdings-inc, shared-services]
+      policies: [arn:aws:iam::aws:policy/PowerUserAccess]
+      
+    prod:
+      accounts: [petunka-holdings-inc, petunka-marketing-llc, internet-marketing-gold, six-figure-coach-secrets-llc]
+      policies: [arn:aws:iam::aws:policy/ReadOnlyAccess]
+
+security:
+  cloudtrail:
+    enabled: true
+    multi_region: true
+    include_global_service_events: true
+    enable_log_file_validation: true
+    log_retention_days: 365
+    
+  guardduty:
+    enabled: true
+    auto_enable_organization_members: true
+    
+  security_hub:
+    enabled: true
+    auto_enable_organization_members: true
+    standards:
+      - aws-foundational-security-best-practices
+      - cis-aws-foundations-benchmark
+
+cost_management:
+  budgets:
+    - name: petunka-monthly-budget
+      limit: 5000
+      unit: USD
+      time_period: MONTHLY
+      alerts:
+        - threshold: 80
+          notification_emails: [finance@petunkaholdings.com]
+        - threshold: 100
+          notification_emails: [finance@petunkaholdings.com, admin@petunkaholdings.com]

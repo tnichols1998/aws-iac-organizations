@@ -1,0 +1,260 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  TF_VERSION: "1.6.0"
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  validate:
+    name: Validate Configuration
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements-dev.txt
+        
+    - name: Validate example configurations
+      run: |
+        python scripts/validate-config.py config/organizations/example.yaml
+        python scripts/validate-config.py config/organizations/petunka-holdings.yaml
+        python scripts/validate-config.py config/organizations/personal-accounts.yaml
+
+  terraform-validate:
+    name: Terraform Validation
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        environment: [dev, qa, prod]
+        
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+        
+    - name: Terraform Format Check
+      run: terraform fmt -check -recursive
+      
+    - name: Terraform Init (modules)
+      run: |
+        cd modules/organization && terraform init -backend=false
+        cd ../scp-baseline && terraform init -backend=false
+        cd ../tag-policy && terraform init -backend=false
+        
+    - name: Terraform Validate (modules)
+      run: |
+        cd modules/organization && terraform validate
+        cd ../scp-baseline && terraform validate
+        cd ../tag-policy && terraform validate
+        
+    - name: Terraform Init (environment)
+      run: |
+        cd environments/${{ matrix.environment }}
+        terraform init -backend=false
+        
+    - name: Terraform Validate (environment)
+      env:
+        TF_VAR_organization_config: "../../config/organizations/example.yaml"
+        TF_VAR_environment: ${{ matrix.environment }}
+      run: |
+        cd environments/${{ matrix.environment }}
+        terraform validate
+
+  test-localstack:
+    name: Test with LocalStack
+    runs-on: ubuntu-latest
+    
+    services:
+      localstack:
+        image: localstack/localstack:latest
+        ports:
+          - 4566:4566
+        env:
+          SERVICES: organizations,iam,s3,cloudtrail,guardduty,securityhub,config,sts
+          DEBUG: 1
+        options: >-
+          --health-cmd "curl -f http://localhost:4566/health"
+          --health-interval 30s
+          --health-timeout 10s
+          --health-retries 3
+          
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements-dev.txt
+        
+    - name: Wait for LocalStack
+      run: |
+        timeout 60 bash -c 'until curl -f http://localhost:4566/health; do sleep 2; done'
+        
+    - name: Test LocalStack deployment
+      env:
+        AWS_ACCESS_KEY_ID: test
+        AWS_SECRET_ACCESS_KEY: test
+        AWS_DEFAULT_REGION: us-east-1
+        TF_VAR_organization_config: "../../config/organizations/example.yaml"
+        TF_VAR_environment: "dev"
+        TF_VAR_localstack_endpoint: "http://localhost:4566"
+      run: |
+        cd environments/dev
+        # Use local backend for testing
+        cat > backend-test.conf << EOF
+        # Local backend for testing
+        EOF
+        terraform init -backend=false
+        terraform plan
+        # Note: Skip apply in CI to avoid rate limits and complexity
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Run Checkov
+      uses: bridgecrewio/checkov-action@master
+      with:
+        directory: .
+        framework: terraform
+        output_format: sarif
+        output_file_path: reports/results.sarif
+        
+    - name: Upload SARIF file
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: reports/results.sarif
+      if: always()
+
+  # Deployment jobs (only on main branch)
+  deploy-dev:
+    name: Deploy to Development
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    needs: [validate, terraform-validate, test-localstack]
+    environment: development
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+        
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
+        aws-region: us-west-2
+        
+    - name: Deploy to Development
+      env:
+        TF_VAR_organization_config: "../../config/organizations/example.yaml"
+        TF_VAR_environment: "dev"
+      run: |
+        cd environments/dev
+        terraform init -backend-config=backend-dev.conf
+        terraform plan
+        terraform apply -auto-approve
+
+  deploy-qa:
+    name: Deploy to QA
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    needs: [deploy-dev]
+    environment: qa
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+        
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_QA }}
+        aws-region: us-west-2
+        
+    - name: Deploy to QA
+      env:
+        TF_VAR_organization_config: "../../config/organizations/example.yaml"
+        TF_VAR_environment: "qa"
+      run: |
+        cd environments/qa
+        terraform init -backend-config=backend-qa.conf
+        terraform plan
+        terraform apply -auto-approve
+
+  deploy-prod:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    needs: [deploy-qa]
+    environment: production
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+        
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
+        aws-region: us-west-2
+        
+    - name: Deploy to Production
+      env:
+        TF_VAR_organization_config: "../../config/organizations/example.yaml"  
+        TF_VAR_environment: "prod"
+      run: |
+        cd environments/prod
+        terraform init -backend-config=backend-prod.conf
+        terraform plan
+        # Require manual approval for production
+        echo "Production deployment planned successfully"
