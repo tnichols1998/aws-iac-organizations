@@ -26,7 +26,7 @@ variable "github_repositories" {
   type        = list(string)
   default = [
     "petunka-holdings/infrastructure",
-    "petunka-holdings/marketing-platform", 
+    "petunka-holdings/marketing-platform",
     "petunka-holdings/coaching-platform"
   ]
 }
@@ -40,7 +40,7 @@ locals {
 # Provider configuration
 provider "aws" {
   region = "us-west-2"
-  
+
   default_tags {
     tags = {
       Environment = var.environment
@@ -53,9 +53,9 @@ provider "aws" {
 
 # GitHub OIDC Provider
 resource "aws_iam_openid_connect_provider" "github" {
-  url = "https://token.actions.githubusercontent.com"
+  url            = "https://token.actions.githubusercontent.com"
   client_id_list = ["sts.amazonaws.com"]
-  
+
   # GitHub's thumbprints - these are stable and rarely change
   thumbprint_list = [
     "6938fd4d98bab03faadb97b34396831e3780aea1",
@@ -119,7 +119,7 @@ resource "aws_iam_role_policy" "github_actions_organizations" {
         Resource = "*"
       },
       {
-        Sid    = "IAMFullAccess" 
+        Sid    = "IAMFullAccess"
         Effect = "Allow"
         Action = [
           "iam:*"
@@ -170,7 +170,7 @@ resource "aws_iam_role_policy" "github_actions_organizations" {
       },
       {
         Sid    = "S3StateAccess"
-        Effect = "Allow" 
+        Effect = "Allow"
         Action = [
           "s3:GetObject",
           "s3:PutObject",
@@ -192,7 +192,7 @@ resource "aws_iam_role_policy" "github_actions_organizations" {
         Effect = "Allow"
         Action = [
           "dynamodb:GetItem",
-          "dynamodb:PutItem", 
+          "dynamodb:PutItem",
           "dynamodb:DeleteItem",
           "dynamodb:CreateTable",
           "dynamodb:DescribeTable",
@@ -242,7 +242,7 @@ resource "local_file" "github_outputs" {
   content = templatefile("${path.module}/github-outputs.tpl", {
     github_actions_role_arn = aws_iam_role.github_actions_admin.arn
     organization_name       = local.org_config.metadata.name
-    region                 = "us-west-2"
+    region                  = "us-west-2"
   })
   filename = "${path.module}/../../.github/workflows/terraform-outputs.yml"
 }

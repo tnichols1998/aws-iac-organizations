@@ -27,15 +27,15 @@ variable "account_ids" {
 # Local processing
 locals {
   github_config = lookup(var.organization_config, "github_actions", {})
-  repositories = lookup(local.github_config, "repositories", [])
-  permissions = lookup(local.github_config, "permissions", {})
+  repositories  = lookup(local.github_config, "repositories", [])
+  permissions   = lookup(local.github_config, "permissions", {})
 }
 
 # GitHub OIDC Provider
 resource "aws_iam_openid_connect_provider" "github" {
   count = lookup(local.github_config, "enabled", false) ? 1 : 0
 
-  url = "https://token.actions.githubusercontent.com"
+  url            = "https://token.actions.githubusercontent.com"
   client_id_list = ["sts.amazonaws.com"]
   thumbprint_list = [
     "6938fd4d98bab03faadb97b34396831e3780aea1",
@@ -96,10 +96,10 @@ resource "aws_iam_role_policy_attachment" "github_actions_basic" {
 # Outputs
 output "github_oidc_provider_arn" {
   description = "GitHub OIDC Provider ARN"
-  value = lookup(local.github_config, "enabled", false) ? aws_iam_openid_connect_provider.github[0].arn : null
+  value       = lookup(local.github_config, "enabled", false) ? aws_iam_openid_connect_provider.github[0].arn : null
 }
 
 output "github_actions_role_arn" {
   description = "GitHub Actions IAM Role ARN"
-  value = lookup(local.github_config, "enabled", false) ? aws_iam_role.github_actions[var.environment].arn : null
+  value       = lookup(local.github_config, "enabled", false) ? aws_iam_role.github_actions[var.environment].arn : null
 }

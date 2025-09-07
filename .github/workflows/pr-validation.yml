@@ -40,12 +40,29 @@ jobs:
           fi
         done
         
+    - name: Setup OpenTofu
+      uses: opentofu/setup-opentofu@v1
+      with:
+        tofu_version: "1.6.0"
+        
+    - name: Check Terraform formatting
+      run: |
+        echo "🎨 Checking Terraform formatting..."
+        
+        # Check if any files need formatting
+        if ! tofu fmt -recursive -check .; then
+          echo "❌ Terraform files are not properly formatted"
+          echo "💡 Run 'tofu fmt -recursive .' locally to fix formatting"
+          echo "📋 Files that need formatting:"
+          tofu fmt -recursive -diff .
+          exit 1
+        else
+          echo "✅ All Terraform files are properly formatted"
+        fi
+        
     - name: Check for syntax errors in Terraform
       run: |
         echo "🔍 Checking Terraform syntax..."
-        
-        # Install Terraform/OpenTofu for syntax checking
-        curl -fsSL https://get.opentofu.org/install-opentofu.sh | bash
         
         # Check syntax in all Terraform files
         for dir in environments/*/ modules/*/; do

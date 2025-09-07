@@ -79,6 +79,21 @@ jobs:
       with:
         tofu_version: "1.6.0"
         
+    - name: Check Terraform formatting
+      run: |
+        echo "🎨 Checking Terraform formatting..."
+        
+        # Check if any files need formatting (fail if not formatted)
+        if ! tofu fmt -recursive -check .; then
+          echo "❌ Terraform files are not properly formatted"
+          echo "💡 Run 'tofu fmt -recursive .' locally and commit the changes"
+          echo "📋 Files that need formatting:"
+          tofu fmt -recursive -diff .
+          exit 1
+        else
+          echo "✅ All Terraform files are properly formatted"
+        fi
+        
     - name: Setup Python for validation
       uses: actions/setup-python@v4
       with:
@@ -189,6 +204,21 @@ jobs:
       uses: opentofu/setup-opentofu@v1
       with:
         tofu_version: "1.6.0"
+        
+    - name: Check Terraform formatting
+      run: |
+        echo "🎨 Checking Terraform formatting..."
+        
+        # Check if any files need formatting (fail if not formatted)
+        if ! tofu fmt -recursive -check .; then
+          echo "❌ Terraform files are not properly formatted"
+          echo "💡 Run 'tofu fmt -recursive .' locally and commit the changes"
+          echo "📋 Files that need formatting:"
+          tofu fmt -recursive -diff .
+          exit 1
+        else
+          echo "✅ All Terraform files are properly formatted"
+        fi
         
     - name: Setup Python for validation
       uses: actions/setup-python@v4

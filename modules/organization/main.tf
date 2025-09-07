@@ -30,10 +30,10 @@ locals {
   org_config = var.organization_config.organization
   accounts   = var.organization_config.accounts
   ous        = var.organization_config.organizational_units
-  
+
   # Environment-specific settings
   env_config = var.organization_config.environments[var.environment]
-  
+
   # Dynamic provider configuration for LocalStack vs AWS
   is_localstack = local.env_config.target == "localstack"
 }
@@ -44,12 +44,12 @@ locals {
 # Main AWS Organizations setup
 resource "aws_organizations_organization" "this" {
   feature_set = local.org_config.feature_set
-  
+
   enabled_policy_types = [
     "SERVICE_CONTROL_POLICY",
     "TAG_POLICY"
   ]
-  
+
   aws_service_access_principals = local.org_config.service_access_principals
 }
 
@@ -58,10 +58,10 @@ resource "aws_organizations_organizational_unit" "ous" {
   for_each = {
     for ou in local.ous : ou.name => ou
   }
-  
+
   name      = each.value.name
   parent_id = aws_organizations_organization.this.roots[0].id
-  
+
   tags = {
     Name        = each.value.name
     Description = lookup(each.value, "description", "")
@@ -83,16 +83,16 @@ resource "aws_organizations_account" "members" {
   for_each = {
     for account in local.accounts : account.name => account
   }
-  
+
   name  = each.value.name
   email = each.value.email
-  
+
   # Place account in specified OU or root
   parent_id = lookup(each.value, "ou", null) != null ? local.ou_id_map[each.value.ou] : aws_organizations_organization.this.roots[0].id
-  
+
   # Prevent account closure on destroy for safety
   close_on_deletion = false
-  
+
   tags = {
     Name        = each.value.name
     Description = lookup(each.value, "description", "")
@@ -100,7 +100,7 @@ resource "aws_organizations_account" "members" {
     OU          = lookup(each.value, "ou", "Root")
     ManagedBy   = "terraform"
   }
-  
+
   lifecycle {
     # Prevent accidental account deletion
     prevent_destroy = true
@@ -110,22 +110,22 @@ resource "aws_organizations_account" "members" {
 # Service Control Policies
 module "scp_baseline" {
   source = "../scp-baseline"
-  
+
   organization_root_id = aws_organizations_organization.this.roots[0].id
   organization_config  = var.organization_config
-  environment         = var.environment
-  
+  environment          = var.environment
+
   depends_on = [aws_organizations_organization.this]
 }
 
 # Tag Policies
 module "tag_policies" {
   source = "../tag-policy"
-  
+
   organization_root_id = aws_organizations_organization.this.roots[0].id
   organization_config  = var.organization_config
-  environment         = var.environment
-  
+  environment          = var.environment
+
   depends_on = [aws_organizations_organization.this]
 }
 

@@ -27,14 +27,14 @@ variable "environment" {
 locals {
   org_config = var.organization_config.organization
   policies   = lookup(var.organization_config, "policies", {})
-  
+
   # Default SCPs that should always be applied
   default_scps = [
     "prevent_org_changes",
-    "region_restrictions", 
+    "region_restrictions",
     "prevent_security_service_disabling"
   ]
-  
+
   # Get SCPs from config or use defaults
   scp_policies = lookup(local.policies, "service_control_policies", [])
 }
@@ -44,7 +44,7 @@ resource "aws_organizations_policy" "prevent_org_changes" {
   name        = "PreventOrganizationChanges"
   description = "Prevent leaving organization and disabling security services"
   type        = "SERVICE_CONTROL_POLICY"
-  
+
   content = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -80,7 +80,7 @@ resource "aws_organizations_policy" "prevent_org_changes" {
       }
     ]
   })
-  
+
   tags = {
     Name        = "PreventOrganizationChanges"
     Environment = var.environment
@@ -99,7 +99,7 @@ resource "aws_organizations_policy" "region_restrictions" {
   name        = "RestrictRegions"
   description = "Restrict access to approved regions only"
   type        = "SERVICE_CONTROL_POLICY"
-  
+
   content = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -138,7 +138,7 @@ resource "aws_organizations_policy" "region_restrictions" {
       }
     ]
   })
-  
+
   tags = {
     Name        = "RestrictRegions"
     Environment = var.environment
@@ -157,7 +157,7 @@ resource "aws_organizations_policy" "prevent_public_s3" {
   name        = "PreventPublicS3"
   description = "Prevent creation of public S3 buckets"
   type        = "SERVICE_CONTROL_POLICY"
-  
+
   content = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -196,7 +196,7 @@ resource "aws_organizations_policy" "prevent_public_s3" {
       }
     ]
   })
-  
+
   tags = {
     Name        = "PreventPublicS3"
     Environment = var.environment
@@ -213,11 +213,11 @@ resource "aws_organizations_policy_attachment" "prevent_public_s3" {
 # Environment-specific restrictions for non-production
 resource "aws_organizations_policy" "non_production_restrictions" {
   count = var.environment != "prod" ? 1 : 0
-  
+
   name        = "NonProductionRestrictions"
   description = "Additional restrictions for development and testing environments"
   type        = "SERVICE_CONTROL_POLICY"
-  
+
   content = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -246,7 +246,7 @@ resource "aws_organizations_policy" "non_production_restrictions" {
       }
     ]
   })
-  
+
   tags = {
     Name        = "NonProductionRestrictions"
     Environment = var.environment
@@ -257,7 +257,7 @@ resource "aws_organizations_policy" "non_production_restrictions" {
 
 resource "aws_organizations_policy_attachment" "non_production_restrictions" {
   count = var.environment != "prod" ? 1 : 0
-  
+
   policy_id = aws_organizations_policy.non_production_restrictions[0].id
   target_id = var.organization_root_id
 }
@@ -267,9 +267,9 @@ output "policy_ids" {
   description = "Map of SCP policy names to their IDs"
   value = merge(
     {
-      prevent_org_changes    = aws_organizations_policy.prevent_org_changes.id
-      region_restrictions    = aws_organizations_policy.region_restrictions.id
-      prevent_public_s3      = aws_organizations_policy.prevent_public_s3.id
+      prevent_org_changes = aws_organizations_policy.prevent_org_changes.id
+      region_restrictions = aws_organizations_policy.region_restrictions.id
+      prevent_public_s3   = aws_organizations_policy.prevent_public_s3.id
     },
     var.environment != "prod" ? {
       non_production_restrictions = aws_organizations_policy.non_production_restrictions[0].id
@@ -281,9 +281,9 @@ output "policy_arns" {
   description = "Map of SCP policy names to their ARNs"
   value = merge(
     {
-      prevent_org_changes    = aws_organizations_policy.prevent_org_changes.arn
-      region_restrictions    = aws_organizations_policy.region_restrictions.arn
-      prevent_public_s3      = aws_organizations_policy.prevent_public_s3.arn
+      prevent_org_changes = aws_organizations_policy.prevent_org_changes.arn
+      region_restrictions = aws_organizations_policy.region_restrictions.arn
+      prevent_public_s3   = aws_organizations_policy.prevent_public_s3.arn
     },
     var.environment != "prod" ? {
       non_production_restrictions = aws_organizations_policy.non_production_restrictions[0].arn

@@ -31,7 +31,7 @@ locals {
   org_config_raw = file(var.organization_config)
   org_config     = yamldecode(local.org_config_raw)
   env_config     = local.org_config.environments[var.environment]
-  
+
   # Determine if we're using LocalStack
   is_localstack = local.env_config.target == "localstack"
 }
@@ -39,30 +39,30 @@ locals {
 # Provider configuration - dynamically configured for LocalStack or AWS
 provider "aws" {
   region = local.env_config.region
-  
+
   # LocalStack configuration
   dynamic "endpoints" {
     for_each = local.is_localstack ? [1] : []
     content {
-      organizations    = var.localstack_endpoint
-      iam             = var.localstack_endpoint
-      s3              = var.localstack_endpoint
-      cloudtrail      = var.localstack_endpoint
-      guardduty       = var.localstack_endpoint
-      securityhub     = var.localstack_endpoint
-      config          = var.localstack_endpoint
-      sts             = var.localstack_endpoint
+      organizations = var.localstack_endpoint
+      iam           = var.localstack_endpoint
+      s3            = var.localstack_endpoint
+      cloudtrail    = var.localstack_endpoint
+      guardduty     = var.localstack_endpoint
+      securityhub   = var.localstack_endpoint
+      config        = var.localstack_endpoint
+      sts           = var.localstack_endpoint
     }
   }
-  
+
   # Skip various checks for LocalStack
   skip_credentials_validation = local.is_localstack
-  skip_metadata_api_check    = local.is_localstack
-  skip_requesting_account_id = local.is_localstack
-  
+  skip_metadata_api_check     = local.is_localstack
+  skip_requesting_account_id  = local.is_localstack
+
   # Use profile if specified and not using LocalStack
   profile = !local.is_localstack && lookup(local.env_config, "profile", null) != null ? local.env_config.profile : null
-  
+
   default_tags {
     tags = {
       Environment = var.environment
@@ -84,8 +84,8 @@ provider "aws" {
 # Main organization module
 module "organization" {
   source = "../../modules/organization"
-  
-  organization_config  = local.org_config
+
+  organization_config = local.org_config
   environment         = var.environment
   localstack_endpoint = local.is_localstack ? var.localstack_endpoint : ""
 }
@@ -93,13 +93,13 @@ module "organization" {
 # Optional: SSO configuration (if enabled and not LocalStack)
 module "sso" {
   count = lookup(local.org_config, "sso", {}).enabled == true && !local.is_localstack ? 1 : 0
-  
+
   source = "../../modules/sso-permission-set"
-  
+
   organization_config = local.org_config
-  environment        = var.environment
-  account_ids        = module.organization.account_ids
-  
+  environment         = var.environment
+  account_ids         = module.organization.account_ids
+
   depends_on = [module.organization]
 }
 
@@ -146,8 +146,8 @@ output "localstack_info" {
 output "deployment_info" {
   description = "Deployment information"
   value = {
-    environment     = var.environment
-    target          = local.env_config.target
+    environment    = var.environment
+    target         = local.env_config.target
     region         = local.env_config.region
     organization   = local.org_config.metadata.name
     accounts_count = length(local.org_config.accounts)

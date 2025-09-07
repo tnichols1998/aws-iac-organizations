@@ -26,8 +26,8 @@ variable "account_ids" {
 
 # Local processing
 locals {
-  sso_config = lookup(var.organization_config, "sso", {})
-  permission_sets = lookup(local.sso_config, "permission_sets", [])
+  sso_config        = lookup(var.organization_config, "sso", {})
+  permission_sets   = lookup(local.sso_config, "permission_sets", [])
   group_assignments = lookup(local.sso_config, "group_assignments", [])
 }
 
@@ -58,11 +58,11 @@ resource "aws_ssoadmin_managed_policy_attachment" "this" {
     for item in flatten([
       for ps_name, ps in {
         for ps in local.permission_sets : ps.name => ps
-      } : [
+        } : [
         for policy in lookup(ps, "managed_policies", []) : {
           permission_set_name = ps_name
-          policy_arn         = policy
-          key               = "${ps_name}-${replace(policy, ":", "-")}"
+          policy_arn          = policy
+          key                 = "${ps_name}-${replace(policy, ":", "-")}"
         }
       ]
     ]) : item.key => item
@@ -106,5 +106,5 @@ output "permission_set_arns" {
 
 output "sso_instance_arn" {
   description = "SSO Instance ARN"
-  value = length(data.aws_ssoadmin_instances.this.arns) > 0 ? tolist(data.aws_ssoadmin_instances.this.arns)[0] : null
+  value       = length(data.aws_ssoadmin_instances.this.arns) > 0 ? tolist(data.aws_ssoadmin_instances.this.arns)[0] : null
 }
