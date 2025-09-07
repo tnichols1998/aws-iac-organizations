@@ -39,15 +39,7 @@ locals {
 }
 
 # Provider configuration based on environment
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = ">= 5.0"
-      configuration_aliases = [aws.organizations]
-    }
-  }
-}
+# (using the terraform block defined above)
 
 # Main AWS Organizations setup
 resource "aws_organizations_organization" "this" {
@@ -59,13 +51,6 @@ resource "aws_organizations_organization" "this" {
   ]
   
   aws_service_access_principals = local.org_config.service_access_principals
-  
-  tags = {
-    Name        = var.organization_config.metadata.name
-    Description = var.organization_config.metadata.description
-    Environment = var.environment
-    ManagedBy   = "terraform"
-  }
 }
 
 # Create Organizational Units dynamically

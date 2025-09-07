@@ -234,7 +234,7 @@ resource "aws_organizations_policy" "non_production_restrictions" {
         ]
         Resource = "*"
         Condition = {
-          ForAnyValue:StringNotLike = {
+          "ForAnyValue:StringNotLike" = {
             "ec2:InstanceType" = [
               "t2.*",
               "t3.*",

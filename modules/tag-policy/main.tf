@@ -85,9 +85,11 @@ resource "aws_organizations_policy" "tag_policies" {
 
 # Attach tag policies to the organization root
 resource "aws_organizations_policy_attachment" "tag_policies" {
-  for_each = aws_organizations_policy.tag_policies
+  for_each = {
+    for policy in local.tag_policies : policy.name => policy
+  }
   
-  policy_id = each.value.id
+  policy_id = aws_organizations_policy.tag_policies[each.key].id
   target_id = var.organization_root_id
 }
 

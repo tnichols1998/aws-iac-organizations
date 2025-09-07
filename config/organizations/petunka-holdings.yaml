@@ -16,12 +16,12 @@ environments:
     
   qa:
     target: aws
-    profile: petunka-qa-admin
+    profile: petunka-sandbox-mgmt-admin
     region: us-west-2
     
   prod:
     target: aws
-    profile: petunka-sandbox-mgmt-admin
+    profile: petunka-prod-admin
     region: us-west-2
 
 organization:
@@ -48,7 +48,7 @@ organizational_units:
     description: Development and testing accounts
 
 accounts:
-  # Security Accounts
+  # Security Accounts  
   - name: log-archive
     email: aws-root+log-archive@petunkaholdings.com
     ou: Security
