@@ -1,0 +1,410 @@
+name: AWS Organizations Infrastructure
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'config/**'
+      - 'modules/**'  
+      - 'environments/**'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'config/**'
+      - 'modules/**'
+      - 'environments/**'
+      - '.github/workflows/**'
+
+jobs:
+  validate:
+    name: Validate Configurations & Code
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Setup OpenTofu
+      uses: opentofu/setup-opentofu@v1
+      with:
+        tofu_version: "1.6.0"
+        
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements-dev.txt
+        
+    - name: Validate all organization configurations
+      run: |
+        echo "🔍 Validating all organization configurations..."
+        
+        for config in config/organizations/*.yaml; do
+          if [ -f "$config" ]; then
+            echo "Validating $config..."
+            python scripts/validate-config.py "$config"
+            echo "✅ $config is valid"
+          fi
+        done
+        
+    - name: Check Terraform formatting
+      run: |
+        echo "🎨 Checking Terraform formatting..."
+        
+        if ! tofu fmt -recursive -check .; then
+          echo "❌ Terraform files are not properly formatted"
+          echo "💡 Run 'tofu fmt -recursive .' locally to fix formatting"
+          echo "📋 Files that need formatting:"
+          tofu fmt -recursive -diff .
+          exit 1
+        else
+          echo "✅ All Terraform files are properly formatted"
+        fi
+        
+    - name: Validate Terraform syntax
+      run: |
+        echo "🔍 Checking Terraform syntax..."
+        
+        for dir in environments/*/ modules/*/; do
+          if [ -d "$dir" ] && [ -f "$dir/main.tf" ]; then
+            echo "Validating syntax in $dir..."
+            cd "$dir"
+            tofu init -backend=false
+            tofu validate
+            cd - > /dev/null
+          fi
+        done
+
+  plan-qa:
+    name: Plan QA Changes
+    runs-on: ubuntu-latest
+    environment: qa
+    needs: validate
+    if: github.event_name == 'pull_request'
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials via OIDC
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        role-session-name: pr-plan-${{ github.event.number }}-${{ vars.ORGANIZATION_NAME }}
+        aws-region: ${{ secrets.AWS_REGION }}
+        
+    - name: Verify AWS Connection
+      run: |
+        echo "📡 Connected to AWS Account: $(aws sts get-caller-identity --query Account --output text)"
+        echo "🔑 Using Role: $(aws sts get-caller-identity --query Arn --output text)"
+        
+    - name: Setup OpenTofu
+      uses: opentofu/setup-opentofu@v1
+      with:
+        tofu_version: "1.6.0"
+        
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements-dev.txt
+        
+    - name: Validate organization configuration
+      run: |
+        python scripts/validate-config.py ${{ vars.TF_VAR_organization_config }}
+        
+    - name: Terraform Init
+      run: |
+        cd environments/${{ vars.TF_VAR_environment }}
+        tofu init
+        
+    - name: Terraform Plan
+      id: plan
+      env:
+        TF_VAR_organization_config: ${{ vars.TF_VAR_organization_config }}
+        TF_VAR_environment: ${{ vars.TF_VAR_environment }}
+      run: |
+        cd environments/${{ vars.TF_VAR_environment }}
+        echo "🔮 Planning changes for ${{ vars.ORGANIZATION_NAME }} organization in ${{ vars.ENVIRONMENT_NAME }} environment"
+        
+        # Capture plan output
+        tofu plan -no-color -detailed-exitcode > plan.txt 2>&1 || export PLAN_EXIT=$?
+        
+        # Check plan results
+        if [ "${PLAN_EXIT}" == "1" ]; then
+          echo "❌ Terraform plan failed"
+          cat plan.txt
+          exit 1
+        elif [ "${PLAN_EXIT}" == "2" ]; then
+          echo "📋 Changes detected in plan"
+          echo "PLAN_HAS_CHANGES=true" >> $GITHUB_OUTPUT
+        else
+          echo "✅ No changes detected"
+          echo "PLAN_HAS_CHANGES=false" >> $GITHUB_OUTPUT
+        fi
+        
+        # Save plan output for comment
+        echo 'PLAN_OUTPUT<<EOF' >> $GITHUB_OUTPUT
+        cat plan.txt >> $GITHUB_OUTPUT
+        echo 'EOF' >> $GITHUB_OUTPUT
+        
+    - name: Comment Plan on PR
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const planOutput = `${{ steps.plan.outputs.PLAN_OUTPUT }}`;
+          const hasChanges = '${{ steps.plan.outputs.PLAN_HAS_CHANGES }}' === 'true';
+          const emoji = hasChanges ? '📋' : '✅';
+          const status = hasChanges ? 'Changes Detected' : 'No Changes';
+          
+          const output = `### ${emoji} Terraform Plan Results - QA (${{ vars.ORGANIZATION_NAME }})
+          
+          **Status**: ${status}
+          **Environment**: ${{ vars.ENVIRONMENT_NAME }}
+          **Organization**: ${{ vars.ORGANIZATION_NAME }}
+          **Config**: ${{ vars.TF_VAR_organization_config }}
+          **AWS Account**: ${{ secrets.AWS_ACCOUNT_ID }}
+          
+          <details><summary>📋 Show Terraform Plan Output</summary>
+          
+          \`\`\`hcl
+          ${planOutput}
+          \`\`\`
+          
+          </details>
+          
+          ---
+          
+          ${hasChanges ? '⚠️ **This PR will make changes to your AWS infrastructure when merged.**' : '✅ **This PR will not make any infrastructure changes.**'}
+          
+          **Next Steps**:
+          ${hasChanges ? 
+            '- Review the planned changes carefully\\n- Merge this PR to apply changes to QA first, then Production' : 
+            '- This PR is safe to merge with no infrastructure impact'
+          }`;
+          
+          // Find existing comment and update it, or create new one
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+          
+          const existingComment = comments.find(comment => 
+            comment.body.includes('Terraform Plan Results - QA')
+          );
+          
+          if (existingComment) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existingComment.id,
+              body: output
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: output
+            });
+          }
+
+  deploy-qa:
+    name: Deploy to QA (${{ vars.ORGANIZATION_NAME }})
+    runs-on: ubuntu-latest
+    environment: qa
+    needs: validate
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      id-token: write
+      contents: read
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials via OIDC
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        role-session-name: github-actions-${{ vars.ORGANIZATION_NAME }}-${{ vars.ENVIRONMENT_NAME }}
+        aws-region: ${{ secrets.AWS_REGION }}
+        
+    - name: Verify AWS Connection
+      run: |
+        echo "📡 Connected to AWS Account: $(aws sts get-caller-identity --query Account --output text)"
+        echo "🔑 Using Role: $(aws sts get-caller-identity --query Arn --output text)"
+        
+    - name: Setup OpenTofu
+      uses: opentofu/setup-opentofu@v1
+      with:
+        tofu_version: "1.6.0"
+        
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements-dev.txt
+        
+    - name: Validate organization configuration
+      run: |
+        python scripts/validate-config.py ${{ vars.TF_VAR_organization_config }}
+        
+    - name: Terraform Init
+      run: |
+        cd environments/${{ vars.TF_VAR_environment }}
+        tofu init
+        
+    - name: Terraform Plan
+      env:
+        TF_VAR_organization_config: ${{ vars.TF_VAR_organization_config }}
+        TF_VAR_environment: ${{ vars.TF_VAR_environment }}
+      run: |
+        cd environments/${{ vars.TF_VAR_environment }}
+        echo "🔮 Planning ${{ vars.ORGANIZATION_NAME }} organization deployment to ${{ vars.ENVIRONMENT_NAME }}"
+        tofu plan -out=tfplan
+        
+    - name: Terraform Apply
+      env:
+        TF_VAR_organization_config: ${{ vars.TF_VAR_organization_config }}
+        TF_VAR_environment: ${{ vars.TF_VAR_environment }}
+      run: |
+        cd environments/${{ vars.TF_VAR_environment }}
+        echo "🚀 Deploying ${{ vars.ORGANIZATION_NAME }} organization to ${{ vars.ENVIRONMENT_NAME }}"
+        tofu apply tfplan
+        
+    - name: Display deployment info
+      env:
+        TF_VAR_organization_config: ${{ vars.TF_VAR_organization_config }}
+        TF_VAR_environment: ${{ vars.TF_VAR_environment }}
+      run: |
+        cd environments/${{ vars.TF_VAR_environment }}
+        echo "### ✅ QA Deployment Complete"
+        echo "**Organization**: ${{ vars.ORGANIZATION_NAME }}"
+        echo "**Environment**: ${{ vars.ENVIRONMENT_NAME }}"
+        echo "**AWS Account**: ${{ secrets.AWS_ACCOUNT_ID }}"
+        echo "**Config**: ${{ vars.TF_VAR_organization_config }}"
+        tofu output
+
+  deploy-prod:
+    name: Deploy to Production (${{ vars.ORGANIZATION_NAME }})
+    runs-on: ubuntu-latest
+    environment: production  # This requires manual approval
+    needs: deploy-qa
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      id-token: write
+      contents: read
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials via OIDC
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        role-session-name: github-actions-${{ vars.ORGANIZATION_NAME }}-${{ vars.ENVIRONMENT_NAME }}
+        aws-region: ${{ secrets.AWS_REGION }}
+        
+    - name: Verify AWS Connection
+      run: |
+        echo "📡 Connected to AWS Account: $(aws sts get-caller-identity --query Account --output text)"
+        echo "🔑 Using Role: $(aws sts get-caller-identity --query Arn --output text)"
+        
+    - name: Setup OpenTofu
+      uses: opentofu/setup-opentofu@v1
+      with:
+        tofu_version: "1.6.0"
+        
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements-dev.txt
+        
+    - name: Validate organization configuration
+      run: |
+        python scripts/validate-config.py ${{ vars.TF_VAR_organization_config }}
+        
+    - name: Create Production Environment (if needed)
+      run: |
+        if [ ! -d "environments/prod" ]; then
+          echo "🏗️ Creating prod environment from qa template"
+          cp -r environments/qa environments/prod
+          # Update backend config for production
+          if [ -f "environments/prod/backend-qa.conf" ]; then
+            sed 's/qa/prod/g' environments/prod/backend-qa.conf > environments/prod/backend-prod.conf
+            rm environments/prod/backend-qa.conf
+          fi
+        fi
+        
+    - name: Terraform Init
+      run: |
+        cd environments/${{ vars.TF_VAR_environment }}
+        tofu init
+        
+    - name: Terraform Plan
+      env:
+        TF_VAR_organization_config: ${{ vars.TF_VAR_organization_config }}
+        TF_VAR_environment: ${{ vars.TF_VAR_environment }}
+      run: |
+        cd environments/${{ vars.TF_VAR_environment }}
+        echo "🔮 Planning ${{ vars.ORGANIZATION_NAME }} organization deployment to ${{ vars.ENVIRONMENT_NAME }}"
+        tofu plan -out=tfplan
+        
+    - name: Terraform Apply
+      env:
+        TF_VAR_organization_config: ${{ vars.TF_VAR_organization_config }}
+        TF_VAR_environment: ${{ vars.TF_VAR_environment }}
+      run: |
+        cd environments/${{ vars.TF_VAR_environment }}
+        echo "🏭 Deploying ${{ vars.ORGANIZATION_NAME }} organization to ${{ vars.ENVIRONMENT_NAME }}"
+        tofu apply tfplan
+        
+    - name: Display deployment info & summary
+      env:
+        TF_VAR_organization_config: ${{ vars.TF_VAR_organization_config }}
+        TF_VAR_environment: ${{ vars.TF_VAR_environment }}
+      run: |
+        cd environments/${{ vars.TF_VAR_environment }}
+        echo "### 🎉 Production Deployment Complete"
+        echo "**Organization**: ${{ vars.ORGANIZATION_NAME }}"
+        echo "**Environment**: ${{ vars.ENVIRONMENT_NAME }}"
+        echo "**AWS Account**: ${{ secrets.AWS_ACCOUNT_ID }}"
+        echo "**Config**: ${{ vars.TF_VAR_organization_config }}"
+        tofu output
+        
+    - name: Create deployment summary
+      run: |
+        echo "## 🚀 Deployment Complete!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Production Deployment Details" >> $GITHUB_STEP_SUMMARY
+        echo "- **Organization**: ${{ vars.ORGANIZATION_NAME }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Environment**: ${{ vars.ENVIRONMENT_NAME }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **AWS Account**: ${{ secrets.AWS_ACCOUNT_ID }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Config File**: ${{ vars.TF_VAR_organization_config }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Commit**: ${GITHUB_SHA}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Deployed by**: ${GITHUB_ACTOR}" >> $GITHUB_STEP_SUMMARY
