@@ -134,7 +134,7 @@ jobs:
     - name: Terraform Plan
       id: plan
       env:
-        TF_VAR_organization_config: ${{ vars.TF_VAR_organization_config }}
+        TF_VAR_organization_config: ../../${{ vars.TF_VAR_organization_config }}
         TF_VAR_environment: ${{ vars.TF_VAR_environment }}
       run: |
         cd environments/${{ vars.TF_VAR_environment }}
@@ -275,7 +275,7 @@ jobs:
         
     - name: Terraform Plan
       env:
-        TF_VAR_organization_config: ${{ vars.TF_VAR_organization_config }}
+        TF_VAR_organization_config: ../../${{ vars.TF_VAR_organization_config }}
         TF_VAR_environment: ${{ vars.TF_VAR_environment }}
       run: |
         cd environments/${{ vars.TF_VAR_environment }}
@@ -315,7 +315,7 @@ jobs:
         
     - name: Terraform Plan
       env:
-        TF_VAR_organization_config: ${{ vars.TF_VAR_organization_config }}
+        TF_VAR_organization_config: ../../${{ vars.TF_VAR_organization_config }}
         TF_VAR_environment: ${{ vars.TF_VAR_environment }}
       run: |
         cd environments/${{ vars.TF_VAR_environment }}
@@ -324,7 +324,7 @@ jobs:
         
     - name: Terraform Apply
       env:
-        TF_VAR_organization_config: ${{ vars.TF_VAR_organization_config }}
+        TF_VAR_organization_config: ../../${{ vars.TF_VAR_organization_config }}
         TF_VAR_environment: ${{ vars.TF_VAR_environment }}
       run: |
         cd environments/${{ vars.TF_VAR_environment }}
@@ -333,7 +333,7 @@ jobs:
         
     - name: Display deployment info
       env:
-        TF_VAR_organization_config: ${{ vars.TF_VAR_organization_config }}
+        TF_VAR_organization_config: ../../${{ vars.TF_VAR_organization_config }}
         TF_VAR_environment: ${{ vars.TF_VAR_environment }}
       run: |
         cd environments/${{ vars.TF_VAR_environment }}
@@ -408,7 +408,7 @@ jobs:
         
     - name: Terraform Plan
       env:
-        TF_VAR_organization_config: ${{ vars.TF_VAR_organization_config }}
+        TF_VAR_organization_config: ../../${{ vars.TF_VAR_organization_config }}
         TF_VAR_environment: ${{ vars.TF_VAR_environment }}
       run: |
         cd environments/${{ vars.TF_VAR_environment }}
@@ -417,16 +417,16 @@ jobs:
         
     - name: Terraform Apply
       env:
-        TF_VAR_organization_config: ${{ vars.TF_VAR_organization_config }}
+        TF_VAR_organization_config: ../../${{ vars.TF_VAR_organization_config }}
         TF_VAR_environment: ${{ vars.TF_VAR_environment }}
       run: |
         cd environments/${{ vars.TF_VAR_environment }}
-        echo "🏭 Deploying ${{ vars.ORGANIZATION_NAME }} organization to ${{ vars.ENVIRONMENT_NAME }}"
+        echo "🏩 Deploying ${{ vars.ORGANIZATION_NAME }} organization to ${{ vars.ENVIRONMENT_NAME }}"
         tofu apply tfplan
         
     - name: Display deployment info & summary
       env:
-        TF_VAR_organization_config: ${{ vars.TF_VAR_organization_config }}
+        TF_VAR_organization_config: ../../${{ vars.TF_VAR_organization_config }}
         TF_VAR_environment: ${{ vars.TF_VAR_environment }}
       run: |
         cd environments/${{ vars.TF_VAR_environment }}

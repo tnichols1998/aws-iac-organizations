@@ -25,9 +25,7 @@ variable "github_repositories" {
   description = "List of GitHub repositories that can assume the OIDC role"
   type        = list(string)
   default = [
-    "petunka-holdings/infrastructure",
-    "petunka-holdings/marketing-platform",
-    "petunka-holdings/coaching-platform"
+    "tnichols1998/aws-iac-organizations"
   ]
 }
 
