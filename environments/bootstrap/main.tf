@@ -216,6 +216,65 @@ resource "aws_iam_role_policy" "github_actions_organizations" {
   })
 }
 
+# S3 bucket for Terraform state storage
+resource "aws_s3_bucket" "terraform_state" {
+  bucket        = "terraform-state-aws-iac-organizations-${var.environment}"
+  force_destroy = false
+
+  tags = {
+    Name        = "terraform-state-aws-iac-organizations-${var.environment}"
+    Purpose     = "Terraform State Storage"
+    Environment = var.environment
+  }
+}
+
+# S3 bucket versioning
+resource "aws_s3_bucket_versioning" "terraform_state" {
+  bucket = aws_s3_bucket.terraform_state.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+# S3 bucket server-side encryption
+resource "aws_s3_bucket_server_side_encryption_configuration" "terraform_state" {
+  bucket = aws_s3_bucket.terraform_state.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+# S3 bucket public access block
+resource "aws_s3_bucket_public_access_block" "terraform_state" {
+  bucket = aws_s3_bucket.terraform_state.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# DynamoDB table for state locking
+resource "aws_dynamodb_table" "terraform_state_lock" {
+  name         = "terraform-state-lock-${var.environment}"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "LockID"
+
+  attribute {
+    name = "LockID"
+    type = "S"
+  }
+
+  tags = {
+    Name        = "terraform-state-lock-${var.environment}"
+    Purpose     = "Terraform State Locking"
+    Environment = var.environment
+  }
+}
+
 # Outputs for use in GitHub Actions
 output "github_oidc_provider_arn" {
   description = "ARN of the GitHub OIDC provider"
@@ -235,6 +294,27 @@ output "organization_info" {
   }
 }
 
+output "s3_backend_bucket" {
+  description = "S3 bucket name for Terraform state"
+  value       = aws_s3_bucket.terraform_state.bucket
+}
+
+output "dynamodb_table_name" {
+  description = "DynamoDB table name for state locking"
+  value       = aws_dynamodb_table.terraform_state_lock.name
+}
+
+output "backend_config" {
+  description = "Backend configuration for environment"
+  value = {
+    bucket         = aws_s3_bucket.terraform_state.bucket
+    key            = "${var.environment}/terraform.tfstate"
+    region         = "us-west-2"
+    encrypt        = true
+    dynamodb_table = aws_dynamodb_table.terraform_state_lock.name
+  }
+}
+
 # Create outputs file for GitHub Actions workflows
 resource "local_file" "github_outputs" {
   content = templatefile("${path.module}/github-outputs.tpl", {
@@ -243,4 +323,24 @@ resource "local_file" "github_outputs" {
     region                  = "us-west-2"
   })
   filename = "${path.module}/../../.github/workflows/terraform-outputs.yml"
+}
+
+# Create backend configuration file for the specified environment
+resource "local_file" "backend_config" {
+  content  = <<-EOT
+# Terraform Backend Configuration for ${title(var.environment)} Environment
+# Generated automatically by bootstrap configuration
+#
+# Usage:
+#   terraform init -backend-config=backend-${var.environment}.conf
+
+bucket         = "${aws_s3_bucket.terraform_state.bucket}"
+key            = "${var.environment}/terraform.tfstate"
+region         = "us-west-2"
+encrypt        = true
+dynamodb_table = "${aws_dynamodb_table.terraform_state_lock.name}"
+EOT
+  filename = "${path.module}/../${var.environment}/backend-${var.environment}.conf"
+
+  depends_on = [aws_s3_bucket.terraform_state, aws_dynamodb_table.terraform_state_lock]
 }

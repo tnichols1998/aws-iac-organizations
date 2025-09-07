@@ -7,6 +7,8 @@ TARGET ?= aws
 ORG_CONFIG ?= example
 AWS_PROFILE ?= 
 LOCALSTACK_ENDPOINT ?= http://localhost:4566
+VAULT ?= AWS
+USE_1PASSWORD ?= true
 
 # Colors for output
 COLOR_GREEN = \033[0;32m
@@ -14,7 +16,7 @@ COLOR_YELLOW = \033[0;33m
 COLOR_RED = \033[0;31m
 COLOR_RESET = \033[0m
 
-.PHONY: help validate plan deploy destroy clean test localstack-start localstack-stop
+.PHONY: help validate plan deploy destroy clean test localstack-start localstack-stop setup-env
 
 help: ## Show this help message
 	@echo "$(COLOR_GREEN)AWS IAC Organizations - Multi-Environment Deployment$(COLOR_RESET)"
@@ -31,6 +33,8 @@ help: ## Show this help message
 	@echo "  TARGET     - Deployment target (aws, localstack) [default: aws]"  
 	@echo "  ORG_CONFIG - Organization config name [default: example]"
 	@echo "  AWS_PROFILE - AWS profile to use (for TARGET=aws)"
+	@echo "  VAULT      - 1Password vault name [default: AWS]"
+	@echo "  USE_1PASSWORD - Use 1Password for credentials (true/false) [default: true]"
 
 validate: ## Validate organization configuration
 	@echo "$(COLOR_YELLOW)Validating configuration: $(ORG_CONFIG)$(COLOR_RESET)"
@@ -89,6 +93,22 @@ setup-dev: ## Setup development environment
 	@pre-commit install
 	@echo "$(COLOR_GREEN)✓ Development environment ready$(COLOR_RESET)"
 
+setup-env: ## Set up environment with 1Password credentials (usage: make setup-env ENV=qa ORG_CONFIG=my-org)
+	@echo "$(COLOR_YELLOW)Setting up environment credentials...$(COLOR_RESET)"
+	@echo "Run the following command to load credentials:"
+	if [ "$(ENV)" = "dev" ] && [ "$(TARGET)" != "aws" ]; then \
+		echo "$(COLOR_GREEN)source scripts/aws-env.sh $(ENV) $(ORG_CONFIG)$(COLOR_RESET)"; \
+	else \
+		echo "$(COLOR_GREEN)source scripts/aws-env.sh $(ENV) $(ORG_CONFIG) --vault $(VAULT)$(COLOR_RESET)"; \
+	fi
+
+load-env: ## Load environment credentials in current shell (must be sourced)
+	ifeq ($(USE_1PASSWORD),true)
+		$(call load_1password_env)
+	else
+		$(call set_terraform_vars)
+	endif
+
 # Configuration management  
 list-configs: ## List available organization configurations
 	@echo "$(COLOR_YELLOW)Available organization configurations:$(COLOR_RESET)"
@@ -128,6 +148,15 @@ define set_terraform_vars
 		export TF_VAR_localstack_endpoint="$(LOCALSTACK_ENDPOINT)"; \
 	elif [ "$(TARGET)" = "aws" ] && [ -n "$(AWS_PROFILE)" ]; then \
 		export AWS_PROFILE="$(AWS_PROFILE)"; \
+	fi;
+endef
+
+# Helper function to load 1Password credentials
+define load_1password_env
+	if [ "$(ENV)" = "dev" ] && [ "$(TARGET)" != "aws" ]; then \
+		source scripts/aws-env.sh $(ENV) $(ORG_CONFIG) --target localstack; \
+	else \
+		source scripts/aws-env.sh $(ENV) $(ORG_CONFIG) --vault $(VAULT); \
 	fi;
 endef
 

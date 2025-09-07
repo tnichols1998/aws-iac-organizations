@@ -100,7 +100,7 @@ jobs:
       with:
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         role-session-name: pr-plan-${{ github.event.number }}-${{ vars.ORGANIZATION_NAME }}
-        aws-region: ${{ secrets.AWS_REGION }}
+        aws-region: ${{ vars.AWS_REGION }}
         
     - name: Verify AWS Connection
       run: |
@@ -129,7 +129,7 @@ jobs:
     - name: Terraform Init
       run: |
         cd environments/${{ vars.TF_VAR_environment }}
-        tofu init
+        tofu init -backend-config=backend-${{ vars.TF_VAR_environment }}.conf
         
     - name: Terraform Plan
       id: plan
@@ -242,7 +242,7 @@ jobs:
       with:
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         role-session-name: github-actions-${{ vars.ORGANIZATION_NAME }}-${{ vars.ENVIRONMENT_NAME }}
-        aws-region: ${{ secrets.AWS_REGION }}
+        aws-region: ${{ vars.AWS_REGION }}
         
     - name: Verify AWS Connection
       run: |
@@ -271,7 +271,7 @@ jobs:
     - name: Terraform Init
       run: |
         cd environments/${{ vars.TF_VAR_environment }}
-        tofu init
+        tofu init -backend-config=backend-${{ vars.TF_VAR_environment }}.conf
         
     - name: Terraform Plan
       env:
@@ -301,7 +301,7 @@ jobs:
       with:
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         role-session-name: github-actions-${{ vars.ORGANIZATION_NAME }}-${{ vars.ENVIRONMENT_NAME }}
-        aws-region: ${{ secrets.AWS_REGION }}
+        aws-region: ${{ vars.AWS_REGION }}
         
     - name: Setup OpenTofu
       uses: opentofu/setup-opentofu@v1
@@ -311,7 +311,7 @@ jobs:
     - name: Terraform Init
       run: |
         cd environments/${{ vars.TF_VAR_environment }}
-        tofu init
+        tofu init -backend-config=backend-${{ vars.TF_VAR_environment }}.conf
         
     - name: Terraform Plan
       env:
@@ -363,7 +363,7 @@ jobs:
       with:
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         role-session-name: github-actions-${{ vars.ORGANIZATION_NAME }}-${{ vars.ENVIRONMENT_NAME }}
-        aws-region: ${{ secrets.AWS_REGION }}
+        aws-region: ${{ vars.AWS_REGION }}
         
     - name: Verify AWS Connection
       run: |
@@ -404,7 +404,7 @@ jobs:
     - name: Terraform Init
       run: |
         cd environments/${{ vars.TF_VAR_environment }}
-        tofu init
+        tofu init -backend-config=backend-${{ vars.TF_VAR_environment }}.conf
         
     - name: Terraform Plan
       env:
