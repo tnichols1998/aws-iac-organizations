@@ -75,13 +75,13 @@ provider "aws" {
   }
 }
 
-# Terraform backend configuration - commented out for local testing
-# terraform {
-#   backend "s3" {
-#     # Backend configuration will be provided via -backend-config flag
-#     # See backend-qa.conf for actual configuration
-#   }
-# }
+# Terraform backend configuration for state management
+terraform {
+  backend "s3" {
+    # Backend configuration will be provided via -backend-config flag
+    # See backend-qa.conf for actual configuration
+  }
+}
 
 # Main organization module
 module "organization" {
