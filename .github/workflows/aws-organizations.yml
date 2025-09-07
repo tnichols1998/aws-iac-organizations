@@ -223,8 +223,8 @@ jobs:
             });
           }
 
-  deploy-qa:
-    name: Deploy to QA (${{ vars.ORGANIZATION_NAME }})
+  plan-qa-main:
+    name: Plan QA Changes (Main Branch)
     runs-on: ubuntu-latest
     environment: qa
     needs: validate
@@ -280,6 +280,46 @@ jobs:
       run: |
         cd environments/${{ vars.TF_VAR_environment }}
         echo "🔮 Planning ${{ vars.ORGANIZATION_NAME }} organization deployment to ${{ vars.ENVIRONMENT_NAME }}"
+        tofu plan -out=tfplan
+
+  deploy-qa:
+    name: Deploy to QA (${{ vars.ORGANIZATION_NAME }})
+    runs-on: ubuntu-latest
+    environment: qa
+    needs: plan-qa-main
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      id-token: write
+      contents: read
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials via OIDC
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        role-session-name: github-actions-${{ vars.ORGANIZATION_NAME }}-${{ vars.ENVIRONMENT_NAME }}
+        aws-region: ${{ secrets.AWS_REGION }}
+        
+    - name: Setup OpenTofu
+      uses: opentofu/setup-opentofu@v1
+      with:
+        tofu_version: "1.6.0"
+        
+    - name: Terraform Init
+      run: |
+        cd environments/${{ vars.TF_VAR_environment }}
+        tofu init
+        
+    - name: Terraform Plan
+      env:
+        TF_VAR_organization_config: ${{ vars.TF_VAR_organization_config }}
+        TF_VAR_environment: ${{ vars.TF_VAR_environment }}
+      run: |
+        cd environments/${{ vars.TF_VAR_environment }}
+        echo "🔮 Final plan before deployment to ${{ vars.ENVIRONMENT_NAME }}"
         tofu plan -out=tfplan
         
     - name: Terraform Apply
