@@ -61,7 +61,9 @@ provider "aws" {
   skip_requesting_account_id  = local.is_localstack
 
   # Use profile if specified and not using LocalStack
-  profile = !local.is_localstack && lookup(local.env_config, "profile", null) != null ? local.env_config.profile : null
+  # Temporarily disabled for GitHub Actions OIDC - will use environment credentials automatically
+  # profile = !local.is_localstack && lookup(local.env_config, "profile", null) != null ? local.env_config.profile : null
+  profile = null
 
   default_tags {
     tags = {
