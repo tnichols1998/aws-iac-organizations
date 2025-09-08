@@ -65,6 +65,7 @@ yarn-error.log*
 # Sensitive configuration files
 config/organizations/*-sensitive.yaml
 secrets.yaml
+.github/workflows/terraform-outputs.yml
 
 # Backup files
 *.bak
