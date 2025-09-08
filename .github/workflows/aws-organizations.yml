@@ -223,8 +223,8 @@ jobs:
             });
           }
 
-  plan-qa:
-    name: Plan QA Changes
+  plan-qa-main:
+    name: Plan QA Changes (Main Branch)
     runs-on: ubuntu-latest
     environment: qa-plan  # Environment for variables, but no approval required
     needs: validate
@@ -275,7 +275,7 @@ jobs:
     name: Apply to QA (${{ vars.ORGANIZATION_NAME }})
     runs-on: ubuntu-latest
     environment: qa  # This requires approval
-    needs: plan-qa
+    needs: plan-qa-main
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     permissions:
       id-token: write
