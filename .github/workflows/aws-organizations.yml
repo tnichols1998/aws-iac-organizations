@@ -223,37 +223,37 @@ jobs:
             });
           }
 
-  plan-qa-main:
-    name: Plan QA Changes (Main Branch)
+  deploy-qa:
+    name: Deploy to QA (${{ vars.ORGANIZATION_NAME }})
     runs-on: ubuntu-latest
-    environment: qa-plan  # Environment for variables, but no approval required
+    environment: qa  # This requires approval
     needs: validate
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     permissions:
       id-token: write
       contents: read
-
+      
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
+    
     - name: Configure AWS credentials via OIDC
       uses: aws-actions/configure-aws-credentials@v4
       with:
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-        role-session-name: github-actions-plan-${{ vars.ORGANIZATION_NAME }}
+        role-session-name: github-actions-${{ vars.ORGANIZATION_NAME }}-${{ vars.ENVIRONMENT_NAME }}
         aws-region: ${{ vars.AWS_REGION }}
-
+        
     - name: Setup OpenTofu
       uses: opentofu/setup-opentofu@v1
       with:
         tofu_version: "1.6.0"
-
+        
     - name: Terraform Init
       run: |
         cd environments/${{ vars.TF_VAR_environment }}
         tofu init -backend-config=backend-${{ vars.TF_VAR_environment }}.conf
-
+        
     - name: Terraform Plan
       env:
         TF_VAR_organization_config: ../../${{ vars.TF_VAR_organization_config }}
@@ -262,52 +262,7 @@ jobs:
         cd environments/${{ vars.TF_VAR_environment }}
         echo "🔮 Planning ${{ vars.ORGANIZATION_NAME }} organization deployment to ${{ vars.ENVIRONMENT_NAME }}"
         tofu plan -out=tfplan
-
-    # Save plan as artifact for apply job
-    - name: Save Terraform Plan
-      uses: actions/upload-artifact@v4
-      with:
-        name: terraform-plan-${{ vars.TF_VAR_environment }}
-        path: environments/${{ vars.TF_VAR_environment }}/tfplan
-        retention-days: 1
-
-  apply-qa:
-    name: Apply to QA (${{ vars.ORGANIZATION_NAME }})
-    runs-on: ubuntu-latest
-    environment: qa  # This requires approval
-    needs: plan-qa-main
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    permissions:
-      id-token: write
-      contents: read
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Configure AWS credentials via OIDC
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-        role-session-name: github-actions-apply-${{ vars.ORGANIZATION_NAME }}
-        aws-region: ${{ vars.AWS_REGION }}
-
-    - name: Setup OpenTofu
-      uses: opentofu/setup-opentofu@v1
-      with:
-        tofu_version: "1.6.0"
-
-    - name: Terraform Init
-      run: |
-        cd environments/${{ vars.TF_VAR_environment }}
-        tofu init -backend-config=backend-${{ vars.TF_VAR_environment }}.conf
-
-    # Download the saved plan
-    - name: Download Terraform Plan
-      uses: actions/download-artifact@v4
-      with:
-        name: terraform-plan-${{ vars.TF_VAR_environment }}
-        path: environments/${{ vars.TF_VAR_environment }}/
+        
     - name: Terraform Apply
       env:
         TF_VAR_organization_config: ../../${{ vars.TF_VAR_organization_config }}
@@ -316,7 +271,7 @@ jobs:
         cd environments/${{ vars.TF_VAR_environment }}
         echo "🚀 Deploying ${{ vars.ORGANIZATION_NAME }} organization to ${{ vars.ENVIRONMENT_NAME }}"
         tofu apply tfplan
-
+        
     - name: Display deployment info
       env:
         TF_VAR_organization_config: ../../${{ vars.TF_VAR_organization_config }}
@@ -329,7 +284,6 @@ jobs:
         echo "**AWS Account**: ${{ secrets.AWS_ACCOUNT_ID }}"
         echo "**Config**: ${{ vars.TF_VAR_organization_config }}"
         tofu output
-
   deploy-prod:
     name: Deploy to Production (${{ vars.ORGANIZATION_NAME }})
     runs-on: ubuntu-latest
