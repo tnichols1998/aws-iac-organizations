@@ -1,5 +1,5 @@
 name: AWS Organizations Infrastructure
-# Enhanced with actionlint pre-commit hook
+# Enhanced with actionlint pre-commit hook for testing
 
 on:
   push:
