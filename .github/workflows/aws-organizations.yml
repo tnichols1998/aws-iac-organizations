@@ -226,7 +226,7 @@ jobs:
   plan-qa:
     name: Plan QA Changes
     runs-on: ubuntu-latest
-    # No environment needed - plan is read-only
+    environment: qa-plan  # Environment for variables, but no approval required
     needs: validate
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     permissions:
