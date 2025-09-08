@@ -94,11 +94,12 @@ resource "aws_organizations_account" "members" {
   close_on_deletion = false
 
   tags = {
-    Name        = each.value.name
+    Name        = replace(each.value.name, "-", "_")
     Description = lookup(each.value, "description", "")
     Environment = var.environment
     OU          = lookup(each.value, "ou", "Root")
     ManagedBy   = "terraform"
+    AccountName = each.value.name
   }
 
   lifecycle {

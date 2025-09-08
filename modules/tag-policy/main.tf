@@ -28,21 +28,33 @@ locals {
   policies     = lookup(var.organization_config, "policies", {})
   tag_policies = lookup(local.policies, "tag_policies", [])
 
+  # Conditionally enable tag policy creation
+  create_tag_policies = var.environment == "dev" || lookup(var.organization_config, "force_tag_policy_creation", false)
+
   # Default tag policy configuration
   default_tags = {
     Environment = {
       tag_value = {
         "@@assign" = ["dev", "staging", "qa", "prod", "sandbox"]
+      },
+      enforced_for = {
+        "@@assign" = ["*"]
       }
     }
     ManagedBy = {
       tag_value = {
         "@@assign" = ["terraform", "manual", "cloudformation"]
+      },
+      enforced_for = {
+        "@@assign" = ["*"]
       }
     }
     Owner = {
       tag_value = {
         "@@assign" = "*"
+      },
+      enforced_for = {
+        "@@assign" = ["*"]
       }
     }
   }
@@ -50,9 +62,9 @@ locals {
 
 # Create tag policies from configuration
 resource "aws_organizations_policy" "tag_policies" {
-  for_each = {
+  for_each = local.create_tag_policies ? {
     for policy in local.tag_policies : policy.name => policy
-  }
+  } : {}
 
   name        = each.value.name
   description = lookup(each.value, "description", "Tag policy for ${each.value.name}")
@@ -69,6 +81,9 @@ resource "aws_organizations_policy" "tag_policies" {
               tag,
               "*"
             )
+          },
+          enforced_for = {
+            "@@assign" = ["*"]
           }
         }
       }
@@ -85,9 +100,9 @@ resource "aws_organizations_policy" "tag_policies" {
 
 # Attach tag policies to the organization root
 resource "aws_organizations_policy_attachment" "tag_policies" {
-  for_each = {
+  for_each = local.create_tag_policies ? {
     for policy in local.tag_policies : policy.name => policy
-  }
+  } : {}
 
   policy_id = aws_organizations_policy.tag_policies[each.key].id
   target_id = var.organization_root_id
@@ -95,7 +110,7 @@ resource "aws_organizations_policy_attachment" "tag_policies" {
 
 # Create a default organization-wide tag policy if none specified
 resource "aws_organizations_policy" "default_tag_policy" {
-  count = length(local.tag_policies) == 0 ? 1 : 0
+  count = local.create_tag_policies && length(local.tag_policies) == 0 ? 1 : 0
 
   name        = "${var.organization_config.metadata.name}-standard-tags"
   description = "Standard tagging policy for ${var.organization_config.metadata.name}"
@@ -109,6 +124,9 @@ resource "aws_organizations_policy" "default_tag_policy" {
         Organization = {
           tag_value = {
             "@@assign" = [var.organization_config.metadata.name]
+          },
+          enforced_for = {
+            "@@assign" = ["*"]
           }
         }
       }
@@ -124,7 +142,7 @@ resource "aws_organizations_policy" "default_tag_policy" {
 }
 
 resource "aws_organizations_policy_attachment" "default_tag_policy" {
-  count = length(local.tag_policies) == 0 ? 1 : 0
+  count = local.create_tag_policies && length(local.tag_policies) == 0 ? 1 : 0
 
   policy_id = aws_organizations_policy.default_tag_policy[0].id
   target_id = var.organization_root_id
@@ -133,24 +151,24 @@ resource "aws_organizations_policy_attachment" "default_tag_policy" {
 # Outputs
 output "tag_policy_ids" {
   description = "Map of tag policy names to their IDs"
-  value = merge(
+  value = local.create_tag_policies ? merge(
     {
       for name, policy in aws_organizations_policy.tag_policies : name => policy.id
     },
     length(local.tag_policies) == 0 ? {
       default = aws_organizations_policy.default_tag_policy[0].id
     } : {}
-  )
+  ) : {}
 }
 
 output "tag_policy_arns" {
   description = "Map of tag policy names to their ARNs"
-  value = merge(
+  value = local.create_tag_policies ? merge(
     {
       for name, policy in aws_organizations_policy.tag_policies : name => policy.arn
     },
     length(local.tag_policies) == 0 ? {
       default = aws_organizations_policy.default_tag_policy[0].arn
     } : {}
-  )
+  ) : {}
 }

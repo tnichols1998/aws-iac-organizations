@@ -37,10 +37,15 @@ locals {
 
   # Get SCPs from config or use defaults
   scp_policies = lookup(local.policies, "service_control_policies", [])
+
+  # Conditionally enable SCP creation - can be overridden via environment variable or config
+  create_scps = var.environment == "dev" || lookup(var.organization_config, "force_scp_creation", false)
 }
 
 # Prevent organization changes and security service disabling
 resource "aws_organizations_policy" "prevent_org_changes" {
+  count = local.create_scps ? 1 : 0
+
   name        = "PreventOrganizationChanges"
   description = "Prevent leaving organization and disabling security services"
   type        = "SERVICE_CONTROL_POLICY"
@@ -90,12 +95,16 @@ resource "aws_organizations_policy" "prevent_org_changes" {
 }
 
 resource "aws_organizations_policy_attachment" "prevent_org_changes" {
-  policy_id = aws_organizations_policy.prevent_org_changes.id
+  count = local.create_scps ? 1 : 0
+
+  policy_id = aws_organizations_policy.prevent_org_changes[0].id
   target_id = var.organization_root_id
 }
 
 # Region restrictions
 resource "aws_organizations_policy" "region_restrictions" {
+  count = local.create_scps ? 1 : 0
+
   name        = "RestrictRegions"
   description = "Restrict access to approved regions only"
   type        = "SERVICE_CONTROL_POLICY"
@@ -148,12 +157,16 @@ resource "aws_organizations_policy" "region_restrictions" {
 }
 
 resource "aws_organizations_policy_attachment" "region_restrictions" {
-  policy_id = aws_organizations_policy.region_restrictions.id
+  count = local.create_scps ? 1 : 0
+
+  policy_id = aws_organizations_policy.region_restrictions[0].id
   target_id = var.organization_root_id
 }
 
 # Prevent public S3 buckets
 resource "aws_organizations_policy" "prevent_public_s3" {
+  count = local.create_scps ? 1 : 0
+
   name        = "PreventPublicS3"
   description = "Prevent creation of public S3 buckets"
   type        = "SERVICE_CONTROL_POLICY"
@@ -206,13 +219,15 @@ resource "aws_organizations_policy" "prevent_public_s3" {
 }
 
 resource "aws_organizations_policy_attachment" "prevent_public_s3" {
-  policy_id = aws_organizations_policy.prevent_public_s3.id
+  count = local.create_scps ? 1 : 0
+
+  policy_id = aws_organizations_policy.prevent_public_s3[0].id
   target_id = var.organization_root_id
 }
 
 # Environment-specific restrictions for non-production
 resource "aws_organizations_policy" "non_production_restrictions" {
-  count = var.environment != "prod" ? 1 : 0
+  count = local.create_scps && var.environment != "prod" ? 1 : 0
 
   name        = "NonProductionRestrictions"
   description = "Additional restrictions for development and testing environments"
@@ -256,7 +271,7 @@ resource "aws_organizations_policy" "non_production_restrictions" {
 }
 
 resource "aws_organizations_policy_attachment" "non_production_restrictions" {
-  count = var.environment != "prod" ? 1 : 0
+  count = local.create_scps && var.environment != "prod" ? 1 : 0
 
   policy_id = aws_organizations_policy.non_production_restrictions[0].id
   target_id = var.organization_root_id
@@ -266,12 +281,12 @@ resource "aws_organizations_policy_attachment" "non_production_restrictions" {
 output "policy_ids" {
   description = "Map of SCP policy names to their IDs"
   value = merge(
-    {
-      prevent_org_changes = aws_organizations_policy.prevent_org_changes.id
-      region_restrictions = aws_organizations_policy.region_restrictions.id
-      prevent_public_s3   = aws_organizations_policy.prevent_public_s3.id
-    },
-    var.environment != "prod" ? {
+    local.create_scps ? {
+      prevent_org_changes = aws_organizations_policy.prevent_org_changes[0].id
+      region_restrictions = aws_organizations_policy.region_restrictions[0].id
+      prevent_public_s3   = aws_organizations_policy.prevent_public_s3[0].id
+    } : {},
+    local.create_scps && var.environment != "prod" ? {
       non_production_restrictions = aws_organizations_policy.non_production_restrictions[0].id
     } : {}
   )
@@ -280,12 +295,12 @@ output "policy_ids" {
 output "policy_arns" {
   description = "Map of SCP policy names to their ARNs"
   value = merge(
-    {
-      prevent_org_changes = aws_organizations_policy.prevent_org_changes.arn
-      region_restrictions = aws_organizations_policy.region_restrictions.arn
-      prevent_public_s3   = aws_organizations_policy.prevent_public_s3.arn
-    },
-    var.environment != "prod" ? {
+    local.create_scps ? {
+      prevent_org_changes = aws_organizations_policy.prevent_org_changes[0].arn
+      region_restrictions = aws_organizations_policy.region_restrictions[0].arn
+      prevent_public_s3   = aws_organizations_policy.prevent_public_s3[0].arn
+    } : {},
+    local.create_scps && var.environment != "prod" ? {
       non_production_restrictions = aws_organizations_policy.non_production_restrictions[0].arn
     } : {}
   )

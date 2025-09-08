@@ -7,6 +7,10 @@ metadata:
   description: "Petunka Holdings Inc AWS Organization"
   version: "1.0.0"
 
+# Temporarily disable policy creation to avoid conflicts with existing policies
+force_scp_creation: false
+force_tag_policy_creation: false
+
 environments:
   dev:
     target: localstack
