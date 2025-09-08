@@ -31,8 +31,16 @@ locals {
   group_assignments = lookup(local.sso_config, "group_assignments", [])
 }
 
-# Get SSO Instance
-data "aws_ssoadmin_instances" "this" {}
+# Get SSO Instance - with error handling
+data "aws_ssoadmin_instances" "this" {
+  # This will fail gracefully if SSO is not enabled or permissions are insufficient
+  lifecycle {
+    postcondition {
+      condition     = length(self.arns) > 0
+      error_message = "AWS Identity Center (SSO) instance not found. Ensure SSO is enabled in this AWS account."
+    }
+  }
+}
 
 # Create Permission Sets
 resource "aws_ssoadmin_permission_set" "this" {
