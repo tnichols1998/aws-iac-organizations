@@ -226,7 +226,7 @@ jobs:
   plan-qa-main:
     name: Plan QA Changes (Main Branch)
     runs-on: ubuntu-latest
-    # No environment approval needed for plan - it's read-only
+    environment: qa
     needs: validate
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     permissions:
@@ -241,8 +241,8 @@ jobs:
       uses: aws-actions/configure-aws-credentials@v4
       with:
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-        role-session-name: github-actions-petunka-holdings-qa
-        aws-region: us-west-2
+        role-session-name: github-actions-${{ vars.ORGANIZATION_NAME }}-${{ vars.ENVIRONMENT_NAME }}
+        aws-region: ${{ vars.AWS_REGION }}
         
     - name: Verify AWS Connection
       run: |
@@ -266,20 +266,20 @@ jobs:
         
     - name: Validate organization configuration
       run: |
-        python scripts/validate-config.py config/organizations/petunka-holdings.yaml
+        python scripts/validate-config.py ${{ vars.TF_VAR_organization_config }}
         
     - name: Terraform Init
       run: |
-        cd environments/qa
-        tofu init -backend-config=backend-qa.conf
+        cd environments/${{ vars.TF_VAR_environment }}
+        tofu init -backend-config=backend-${{ vars.TF_VAR_environment }}.conf
         
     - name: Terraform Plan
       env:
-        TF_VAR_organization_config: ../../config/organizations/petunka-holdings.yaml
-        TF_VAR_environment: qa
+        TF_VAR_organization_config: ../../${{ vars.TF_VAR_organization_config }}
+        TF_VAR_environment: ${{ vars.TF_VAR_environment }}
       run: |
-        cd environments/qa
-        echo "🔮 Planning petunka-holdings organization deployment to QA"
+        cd environments/${{ vars.TF_VAR_environment }}
+        echo "🔮 Planning ${{ vars.ORGANIZATION_NAME }} organization deployment to ${{ vars.ENVIRONMENT_NAME }}"
         tofu plan -out=tfplan
 
   deploy-qa:
