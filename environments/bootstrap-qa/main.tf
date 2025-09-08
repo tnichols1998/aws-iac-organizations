@@ -125,12 +125,33 @@ resource "aws_iam_role_policy" "github_actions_organizations" {
         Resource = "*"
       },
       {
-        Sid    = "SSOFullAccess"
+        Sid    = "SSOAdminFullAccess"
         Effect = "Allow"
         Action = [
           "sso:*",
           "sso-admin:*",
           "identitystore:*"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "SSOPermissionSetManagement"
+        Effect = "Allow"
+        Action = [
+          "sso-admin:CreatePermissionSet",
+          "sso-admin:UpdatePermissionSet",
+          "sso-admin:DeletePermissionSet",
+          "sso-admin:DescribePermissionSet",
+          "sso-admin:ListPermissionSets",
+          "sso-admin:AttachManagedPolicyToPermissionSet",
+          "sso-admin:DetachManagedPolicyFromPermissionSet",
+          "sso-admin:ListManagedPoliciesInPermissionSet",
+          "sso-admin:CreateAccountAssignment",
+          "sso-admin:DeleteAccountAssignment",
+          "sso-admin:ListAccountAssignments",
+          "sso-admin:ProvisionPermissionSet",
+          "sso-admin:ListInstances",
+          "sso-admin:DescribeInstance"
         ]
         Resource = "*"
       },
