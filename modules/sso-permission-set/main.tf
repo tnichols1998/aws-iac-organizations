@@ -2,8 +2,9 @@ terraform {
   required_version = ">= 1.6.0"
   required_providers {
     aws = {
-      source  = "hashicorp/aws"
-      version = ">= 5.0"
+      source                = "hashicorp/aws"
+      version               = ">= 5.0"
+      configuration_aliases = [aws.sso]
     }
   }
 }
@@ -33,6 +34,7 @@ locals {
 
 # Get SSO Instance - with error handling
 data "aws_ssoadmin_instances" "this" {
+  provider = aws.sso
   # This will fail gracefully if SSO is not enabled or permissions are insufficient
   lifecycle {
     postcondition {
@@ -44,6 +46,7 @@ data "aws_ssoadmin_instances" "this" {
 
 # Create Permission Sets
 resource "aws_ssoadmin_permission_set" "this" {
+  provider = aws.sso
   for_each = {
     for ps in local.permission_sets : ps.name => ps
   }
@@ -62,6 +65,7 @@ resource "aws_ssoadmin_permission_set" "this" {
 
 # Attach AWS Managed Policies to Permission Sets
 resource "aws_ssoadmin_managed_policy_attachment" "this" {
+  provider = aws.sso
   for_each = {
     for item in flatten([
       for ps_name, ps in {

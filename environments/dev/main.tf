@@ -73,6 +73,39 @@ provider "aws" {
   }
 }
 
+# Separate provider for SSO operations - must use us-east-1
+provider "aws" {
+  alias  = "sso"
+  region = "us-east-1"
+
+  # LocalStack configuration for SSO
+  dynamic "endpoints" {
+    for_each = local.is_localstack ? [1] : []
+    content {
+      ssoadmin      = var.localstack_endpoint
+      identitystore = var.localstack_endpoint
+      sts           = var.localstack_endpoint
+    }
+  }
+
+  # Skip various checks for LocalStack
+  skip_credentials_validation = local.is_localstack
+  skip_metadata_api_check     = local.is_localstack
+  skip_requesting_account_id  = local.is_localstack
+
+  # Use profile if specified and not using LocalStack
+  profile = !local.is_localstack && lookup(local.env_config, "profile", null) != null ? local.env_config.profile : null
+
+  default_tags {
+    tags = {
+      Environment = var.environment
+      ManagedBy   = "terraform"
+      Project     = "aws-iac-organizations"
+      Target      = local.env_config.target
+    }
+  }
+}
+
 # Terraform backend configuration - will be set via backend-dev.conf
 terraform {
   backend "s3" {
@@ -95,6 +128,10 @@ module "sso" {
   count = lookup(local.org_config, "sso", {}).enabled == true && !local.is_localstack ? 1 : 0
 
   source = "../../modules/sso-permission-set"
+
+  providers = {
+    aws.sso = aws.sso
+  }
 
   organization_config = local.org_config
   environment         = var.environment
