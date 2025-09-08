@@ -288,7 +288,7 @@ jobs:
     name: Deploy to Production (${{ vars.ORGANIZATION_NAME }})
     runs-on: ubuntu-latest
     environment: production  # This requires manual approval
-    needs: apply-qa
+    needs: deploy-qa
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     permissions:
       id-token: write
