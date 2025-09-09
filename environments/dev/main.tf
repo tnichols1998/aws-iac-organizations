@@ -73,10 +73,10 @@ provider "aws" {
   }
 }
 
-# Separate provider for SSO operations - must use us-east-1
+# Separate provider for SSO operations - uses same region as main provider
 provider "aws" {
   alias  = "sso"
-  region = "us-east-1"
+  region = local.env_config.region
 
   # LocalStack configuration for SSO
   dynamic "endpoints" {

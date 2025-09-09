@@ -31,6 +31,14 @@ locals {
   accounts   = var.organization_config.accounts
   ous        = var.organization_config.organizational_units
 
+  # Process accounts with email templating
+  processed_accounts = [
+    for account in local.accounts : merge(account, {
+      # Use email_template if available, otherwise use email directly
+      email = lookup(account, "email_template", null) != null ? replace(account.email_template, "{env}", var.environment) : account.email
+    })
+  ]
+
   # Environment-specific settings
   env_config = var.organization_config.environments[var.environment]
 
@@ -80,7 +88,7 @@ locals {
 # Create member accounts
 resource "aws_organizations_account" "members" {
   for_each = {
-    for account in local.accounts : account.name => account
+    for account in local.processed_accounts : account.name => account
   }
 
   name  = each.value.name

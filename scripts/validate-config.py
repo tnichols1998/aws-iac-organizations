@@ -182,10 +182,16 @@ class ConfigValidator:
                 continue
             
             # Validate required fields
-            required_fields = ['name', 'email']
-            for field in required_fields:
-                if field not in account:
-                    self.errors.append(f"accounts[{i}].{field} is required")
+            if 'name' not in account:
+                self.errors.append(f"accounts[{i}].name is required")
+            
+            # Require either email or email_template
+            has_email = 'email' in account
+            has_email_template = 'email_template' in account
+            if not has_email and not has_email_template:
+                self.errors.append(f"accounts[{i}] must have either 'email' or 'email_template'")
+            elif has_email and has_email_template:
+                self.errors.append(f"accounts[{i}] cannot have both 'email' and 'email_template'")
             
             # Validate name uniqueness
             if 'name' in account:
@@ -199,15 +205,26 @@ class ConfigValidator:
                     self.errors.append(f"Account name '{name}' should contain only alphanumeric characters, hyphens, and underscores")
             
             # Validate email uniqueness and format
+            email_to_check = None
             if 'email' in account:
-                email = account['email']
-                if email in account_emails:
-                    self.errors.append(f"Duplicate account email: {email}")
-                account_emails.add(email)
+                email_to_check = account['email']
+            elif 'email_template' in account:
+                # For templates, validate the template format and generate a test email
+                template = account['email_template']
+                if '{env}' not in template:
+                    self.errors.append(f"email_template must contain '{{env}}' placeholder: {template}")
+                else:
+                    # Generate test email for uniqueness check
+                    email_to_check = template.replace('{env}', 'test')
+            
+            if email_to_check:
+                if email_to_check in account_emails:
+                    self.errors.append(f"Duplicate account email/template: {email_to_check}")
+                account_emails.add(email_to_check)
                 
                 # Basic email validation
-                if not re.match(r'^[^@]+@[^@]+\.[^@]+$', email):
-                    self.errors.append(f"Invalid email format: {email}")
+                if not re.match(r'^[^@]+@[^@]+\.[^@]+$', email_to_check):
+                    self.errors.append(f"Invalid email format: {email_to_check}")
             
             # Validate OU reference
             if 'ou' in account:

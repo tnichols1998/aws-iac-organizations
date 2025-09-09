@@ -45,16 +45,16 @@ plan: validate ## Plan deployment changes
 	@echo "$(COLOR_YELLOW)Planning deployment for $(ENV) environment using $(ORG_CONFIG) config$(COLOR_RESET)"
 	@cd environments/$(ENV) && \
 		$(call set_terraform_vars) \
-		terraform init -backend-config="backend-$(ENV).conf" && \
-		terraform plan -var-file="../../config/organizations/$(ORG_CONFIG).tfvars"
+		tofu init -backend-config="backend-$(ENV).conf" && \
+		tofu plan -var="organization_config=../../config/organizations/$(ORG_CONFIG).yaml"
 
 deploy: validate ## Deploy infrastructure  
 	@echo "$(COLOR_YELLOW)Deploying to $(ENV) environment using $(ORG_CONFIG) config$(COLOR_RESET)"
 	@cd environments/$(ENV) && \
 		$(call set_terraform_vars) \
-		terraform init -backend-config="backend-$(ENV).conf" && \
-		terraform plan -var-file="../../config/organizations/$(ORG_CONFIG).tfvars" && \
-		terraform apply -var-file="../../config/organizations/$(ORG_CONFIG).tfvars" -auto-approve
+		tofu init -backend-config="backend-$(ENV).conf" && \
+		tofu plan -var="organization_config=../../config/organizations/$(ORG_CONFIG).yaml" && \
+		tofu apply -var="organization_config=../../config/organizations/$(ORG_CONFIG).yaml" -auto-approve
 	@echo "$(COLOR_GREEN)✓ Deployment completed successfully$(COLOR_RESET)"
 
 destroy: ## Destroy infrastructure
@@ -62,7 +62,7 @@ destroy: ## Destroy infrastructure
 	@read -p "Are you sure? (y/N): " confirm && [ "$$confirm" = "y" ]
 	@cd environments/$(ENV) && \
 		$(call set_terraform_vars) \
-		terraform destroy -var-file="../../config/organizations/$(ORG_CONFIG).tfvars" -auto-approve
+		tofu destroy -var="organization_config=../../config/organizations/$(ORG_CONFIG).yaml" -auto-approve
 
 clean: ## Clean terraform state and cache
 	@echo "$(COLOR_YELLOW)Cleaning terraform cache for $(ENV)$(COLOR_RESET)"
@@ -135,7 +135,7 @@ ifndef RESOURCE_ID
 endif
 	@cd environments/$(ENV) && \
 		$(call set_terraform_vars) \
-		terraform import $(RESOURCE_TYPE).$(RESOURCE_ID) $(RESOURCE_ID)
+		tofu import $(RESOURCE_TYPE).$(RESOURCE_ID) $(RESOURCE_ID)
 
 # Helper function to set terraform variables based on target
 define set_terraform_vars
@@ -165,3 +165,32 @@ generate-tfvars: ## Generate terraform.tfvars from YAML config
 	@echo "$(COLOR_YELLOW)Generating terraform vars for $(ORG_CONFIG)$(COLOR_RESET)"  
 	@python3 scripts/yaml-to-tfvars.py config/organizations/$(ORG_CONFIG).yaml > config/organizations/$(ORG_CONFIG).tfvars
 	@echo "$(COLOR_GREEN)✓ Generated $(ORG_CONFIG).tfvars$(COLOR_RESET)"
+
+# Environment-specific commands
+plan-qa: ## Plan deployment for QA environment
+	@make plan ENV=qa ORG_CONFIG=petunka-holdings
+
+plan-prod: ## Plan deployment for production environment  
+	@make plan ENV=prod ORG_CONFIG=petunka-holdings
+
+deploy-qa: ## Deploy to QA environment
+	@make deploy ENV=qa ORG_CONFIG=petunka-holdings
+
+deploy-prod: ## Deploy to production environment
+	@make deploy ENV=prod ORG_CONFIG=petunka-holdings
+
+# Show email templating preview
+preview-emails: ## Preview how emails will be templated for each environment
+	@echo "$(COLOR_YELLOW)Email templating preview:$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_GREEN)QA Environment:$(COLOR_RESET)"
+	@echo "  aws-root+qa@petunkaholdings.com"
+	@echo "  aws-root+qa-marketing@petunkaholdings.com"
+	@echo "  aws-root+qa-img@petunkaholdings.com"
+	@echo "  aws-root+qa@sixfigurecoachsecrets.com"
+	@echo ""
+	@echo "$(COLOR_GREEN)Production Environment:$(COLOR_RESET)"
+	@echo "  aws-root+prod@petunkaholdings.com"
+	@echo "  aws-root+prod-marketing@petunkaholdings.com" 
+	@echo "  aws-root+prod-img@petunkaholdings.com"
+	@echo "  aws-root+prod@sixfigurecoachsecrets.com"
